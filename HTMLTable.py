@@ -8,12 +8,14 @@ def style_to_css(style_sheet):
     return f'style="{text}"'
 
 class TableCell(object):
-    def __init__(self, text, x, y, set_header=False, style_sheet={}) -> None:
+    def __init__(self, text, x, y, rowspan=1, colspan=1, set_header=False, style_sheet={}) -> None:
         self.text = text
         self.x, self.y = x, y
+        self.rowspan, self.colspan = rowspan, colspan
         self.cell_type = 'th' if (x == 0 and set_header) else 'td'
         assert isinstance(style_sheet, dict)
         self.style_sheet = style_sheet
+        self.dummy = False
     
     def set_style(self, key, value):
         self.style_sheet[key] = value
@@ -39,8 +41,11 @@ class TableCell(object):
         return str(self.text)
     
     def to_html(self):
-        return f'\t<{self.cell_type}{" " + self.style_to_css() if self.style_sheet else ""}>' + \
-            f'{self.text_to_str()}</{self.cell_type}>\n'
+        return f'\t<{self.cell_type}' + \
+            (f' rowspan={self.rowspan}' if self.rowspan != 1 else '') + \
+            (f' colspan={self.colspan}' if self.colspan != 1 else '') + \
+            (f' {self.style_to_css()}>' if self.style_sheet else '>') + \
+            f'{self.text_to_str()}</{self.cell_type}>\n' if not self.dummy else ''
 
     def __str__(self) -> str:
         return f'{super().__str__()}\n' + \
@@ -59,7 +64,7 @@ class Table(object):
         
         for i, row in enumerate(data):
             assert isinstance(row, list)
-            self.cells.append([TableCell(cell, i, j, set_header) for j, cell in enumerate(row)])
+            self.cells.append([TableCell(cell, i, j, set_header=set_header) for j, cell in enumerate(row)])
             if self.n_col is None:
                 self.n_col = len(row)
             else:
@@ -98,6 +103,30 @@ class Table(object):
         for row in self.cells:
             for cell in row:
                 cell.clear_style_sheet()
+    
+    def collapse_row(self, row, col, span, center=True):
+        self.cells[row][col].colspan = span
+        if center:
+            self.cells[row][col].set_style('horizontal-align', 'center')
+        for i in range(1, span):
+            self.cells[row][col + i].dummy = True
+    
+    def collapse_col(self, row, col, span, center=True):
+        self.cells[row][col].rowspan = span
+        if center:
+            self.cells[row][col].set_style('vertical-align', 'center')
+        for i in range(1, span):
+            self.cells[row + i][col].dummy = True
+    
+    def collapse_block(self, row, col, rowspan, colspan, center=True):
+        self.cells[row][col].rowspan = rowspan
+        self.cells[row][col].colspan = colspan
+        if center:
+            self.cells[row][col].set_style('vertical-align', 'center')
+            self.cells[row][col].set_style('horizontal-align', 'center')
+        for i in range(1, rowspan):
+            for j in range(1, colspan):
+                self.cells[row + i][col + j].dummy = True
     
     def to_html(self, table_style_sheet=None):
         text = f'<table {style_to_css(DEFAULT_TABLE_STYLE) if not table_style_sheet else table_style_sheet}>\n'
